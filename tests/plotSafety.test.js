@@ -1,0 +1,11 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { plotGeometryErrors } from '../src/plotSafety.js';
+const settings = { bedWidth: 256, bedHeight: 256, penTipOffsetX: 0, penTipOffsetY: -30, penOffsetX: 0, penOffsetY: 0, parkX: 0, parkY: 256, penDownZ: 1, penUpZ: 15, safeZ: 15, feedrate: 1200, travelSpeed: 3000, penProtrusion: 5, springTravel: 20 };
+const paths = [[{x: 20, y: 20}, {x: 40, y: 40}]];
+test('nozzle profile 1/15 with spring pen 5/20 is valid', () => assert.deepEqual(plotGeometryErrors(paths, settings), []));
+test('nozzle can be out of bounds even with pen inside bed', () => assert.ok(plotGeometryErrors([[{x: 20,y: 225}, {x: 40,y: 240}]], settings).length));
+test('reject invalid coordinates and park', () => { for (const change of [{parkX: -1}, {parkY: NaN}, {penOffsetX: Infinity}]) assert.ok(plotGeometryErrors(paths, {...settings, ...change}).length); });
+test('reject unsafe heights', () => { for (const change of [{penDownZ: -1}, {penUpZ: 0}, {safeZ: 0.5}, {safeZ: 200}, {penDownZ: NaN}]) assert.ok(plotGeometryErrors(paths, {...settings, ...change}).length); });
+test('user-selected Z1 is accepted independently of hidden pen mechanics', () => { for (const change of [{penProtrusion: 16}, {penProtrusion: 0.5}, {springTravel: 3}]) assert.deepEqual(plotGeometryErrors(paths, {...settings, ...change,penUpZ:1,safeZ:1}),[]); });
+test('reject empty geometry and invalid speed', () => { assert.ok(plotGeometryErrors([],settings).length); for (const feedrate of [0,-1,NaN,51000]) assert.ok(plotGeometryErrors(paths,{...settings,feedrate}).length); });

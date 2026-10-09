@@ -1,0 +1,15 @@
+node_modules/
+dist/
+releases/
+release/
+backups/
+*.log
+*.local
+*.berets.json
+.env
+.env.*
+!.env.example
+.DS_Store
+.vscode/
+.idea/
+__pycache__/

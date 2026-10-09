@@ -1,0 +1,10 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { compilePlot, samplePlot } from '../src/plotJob.js';
+const s = { bedWidth:256, bedHeight:256, penTipOffsetX:0, penTipOffsetY:-30, penOffsetX:0, penOffsetY:0, parkX:0,parkY:256,penDownZ:1,penUpZ:15,safeZ:15,feedrate:1200,travelSpeed:3000,penProtrusion:5,springTravel:20 };
+const paths = [[{x:20,y:20},{x:40,y:40}],[{x:80,y:50},{x:90,y:60}]];
+test('home once, then lift nozzle before any XY movement', () => { const job=compilePlot(paths,s); const lines=job.gcode.split('\n').filter(l=>!l.startsWith(';')); assert.equal(lines.filter(l=>l==='G28').length,1); assert.ok(lines.indexOf('G28') < lines.indexOf('G0 Z15.00 F600')); assert.ok(lines.indexOf('G0 Z15.00 F600') < lines.findIndex(l=>l.startsWith('G0 X'))); assert.ok(!lines.some(l=>l.startsWith('G92'))); });
+test('every travel and park stays at Z15, every stroke at Z1', () => { for (const move of compilePlot(paths,s).segments) { if (move.from.x!==move.to.x || move.from.y!==move.to.y) assert.equal(move.to.z, move.draw?1:15); if (move.draw) assert.equal(move.from.z,1); } });
+test('pen offset is correctly compensated in generated commands', () => assert.match(compilePlot(paths,s).gcode,/G0 X20.00 Y50.00/));
+test('compile refuses invalid geometry', () => assert.throws(()=>compilePlot([[{x:-10,y:0},{x:0,y:0}]],s)));
+test('simulation follows actual Z motion and lands on final park', () => { const job=compilePlot(paths,s); const end=samplePlot(job.segments,1); assert.deepEqual(end.position,{x:0,y:256,z:15}); const start=samplePlot(job.segments,0); assert.deepEqual(start.position,{x:0,y:0,z:15}); assert.ok(job.seconds>0); });

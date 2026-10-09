@@ -1,0 +1,27 @@
+name: Portable release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: python3 scripts/package-release.py
+      - name: Publish portable archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --title "BERETS Plot $GITHUB_REF_NAME" --notes-file .github/RELEASE-NOTES.md
+          fi
+          gh release upload "$GITHUB_REF_NAME" releases/BERETS-Plot-Ubuntu-Windows.zip --clobber

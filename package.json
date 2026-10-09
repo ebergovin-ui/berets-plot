@@ -1,0 +1,57 @@
+{
+  "name": "berets-plot",
+  "version": "0.1.0",
+  "description": "BERETS Plot — local text and drawing workspace for Bambu Lab pen plotters.",
+  "type": "module",
+  "bin": {
+    "berets-plot": "bin/plotterstudio.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "public",
+    "server",
+    "src",
+    "scripts",
+    "index.html",
+    "vite.config.js",
+    "README.md"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "server": "node server/index.js",
+    "start": "node bin/plotterstudio.js server",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "basic-ftp": "^6.0.1",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "hersheytext": "^2.0.0",
+    "mammoth": "^1.13.0",
+    "mqtt": "^5.15.1",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.1",
+    "vite": "^8.0.10"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "author": "BERGROBIK",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ebergovin-ui/berets-plot.git"
+  },
+  "homepage": "https://github.com/ebergovin-ui/berets-plot#readme",
+  "bugs": {
+    "url": "https://github.com/ebergovin-ui/berets-plot/issues"
+  }
+}
