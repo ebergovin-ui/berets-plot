@@ -17,6 +17,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: python3 scripts/package-release.py
+      - run: python3 scripts/smoke-release.py
       - name: Publish portable archive
         env:
           GH_TOKEN: ${{ github.token }}
