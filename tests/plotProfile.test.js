@@ -68,3 +68,11 @@ test('one millimetre clearance lifts the nozzle above the extended pen',()=>{
  assert.equal(next.penLiftMm,1);assert.equal(next.penUpZ,6);
  assert.equal(upgradePlotProfile({...next,penLiftMm:2}).penUpZ,7);
 });
+
+test('30 mm front mount keeps ink at the top boundary reachable after output reflection', () => {
+ const s={...settings,penTipOffsetY:30,penTipOffsetX:0,penOffsetX:0,penOffsetY:0,mirrorOutputX:false,mirrorOutputY:true,penUpZ:10,safeZ:10};
+ const edge=[{x:23,y:30},{x:233,y:256}];
+ const job=compilePlot([edge.map(p=>orientPlotPoint(p,s))],s);
+ assert.ok(job.segments.filter(p=>p.draw).every(p=>p.to.y>=0 && p.to.y<=226));
+ assert.throws(()=>compilePlot([[{x:23,y:29.99},{x:30,y:31}].map(p=>orientPlotPoint(p,s))],s),/пределы/);
+});

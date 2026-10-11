@@ -13,7 +13,7 @@ import { translate } from './i18n.js';
 import { validateProject } from './projectFile.js';
 import { normalizePaper, resizeObject } from './editorGeometry.js';
 import { formatTextBlock } from './textLayout.js';
-import { speedProfile, upgradePlotProfile, orientPlotPoint, reachablePenBounds } from './plotProfile.js';
+import { speedProfile, upgradePlotProfile, orientPlotPoint, reachablePenBounds, unreachablePenZones } from './plotProfile.js';
 import './Berets.css';
 
 const PRESETS = {
@@ -909,7 +909,7 @@ function App() {
       const saved = JSON.parse(localStorage.getItem('berets-nozzle-profile-v2') || localStorage.getItem('berets-nozzle-profile-v1') || '{}');
       if (!saved.paperFormat) Object.assign(saved, { paperFormat: 'A4', paperWidth: 210, paperHeight: 297, originX: 23, originY: 0 });
       return clampPaperToReachableArea(upgradePlotProfile(saved, defaultSettings));
-    } catch { return clampPaperToReachableArea(defaultSettings); }
+    } catch { return clampPaperToReachableArea({...defaultSettings, ...speedProfile(defaultSettings.speedPercent)}); }
   });
   const [object, setObject] = useState(() => editorDraft?.object || defaultObject);
   const [printerConfig, setPrinterConfig] = useState(loadPrinterConfig);
@@ -1094,14 +1094,7 @@ function App() {
     lineNumbersEnabled,
   }), [bambuSafetyHeader, exportPaths, homeBeforeDirectSend, lineNumbersEnabled, preserveZZero, settings.feedrate, settings.mirrorOutputX, settings.mirrorOutputY, settings.parkX, settings.parkY, settings.penDownZ, settings.penOffsetX, settings.penOffsetY, settings.penTipOffsetX, settings.penTipOffsetY, settings.penUpZ, settings.safeZ, settings.travelSpeed, zConfirmed]);
   const preparedJobIsFresh = preparedJob?.signature === sliceSignature;
-  const unreachableZones = useMemo(() => {
-    const zones = [];
-    if (settings.penTipOffsetX > 0) zones.push({ x: 0, y: 0, width: settings.penTipOffsetX, height: settings.bedHeight });
-    if (settings.penTipOffsetX < 0) zones.push({ x: settings.bedWidth + settings.penTipOffsetX, y: 0, width: Math.abs(settings.penTipOffsetX), height: settings.bedHeight });
-    if (settings.penTipOffsetY > 0) zones.push({ x: 0, y: 0, width: settings.bedWidth, height: settings.penTipOffsetY });
-    if (settings.penTipOffsetY < 0) zones.push({ x: 0, y: settings.bedHeight + settings.penTipOffsetY, width: settings.bedWidth, height: Math.abs(settings.penTipOffsetY) });
-    return zones.filter((zone) => zone.width > 0 && zone.height > 0);
-  }, [settings.bedHeight, settings.bedWidth, settings.penTipOffsetX, settings.penTipOffsetY]);
+  const unreachableZones = useMemo(() => unreachablePenZones(settings), [settings.bedHeight, settings.bedWidth, settings.penTipOffsetX, settings.penTipOffsetY, settings.penOffsetX, settings.penOffsetY]);
 
   const handlePresetChange = (presetKey) => {
     const preset = PRESETS[presetKey];
@@ -2482,16 +2475,7 @@ function App() {
             <rect width={settings.bedWidth} height={settings.bedHeight} rx="4" fill="url(#plate-texture)" opacity="0.95" />
             <rect width={settings.bedWidth} height={settings.bedHeight} rx="4" fill="url(#plate-grid)" />
             <rect width={settings.bedWidth} height={settings.bedHeight} rx="4" fill="url(#plate-grid-major)" />
-            {unreachableZones.map((zone, index) => (
-              <g key={`unreachable-${index}`} className="unreachable-zone">
-                <rect x={zone.x} y={zone.y} width={zone.width} height={zone.height} />
-                {zone.width > 14 && zone.height > 14 && (
-                  <text x={zone.x + zone.width / 2} y={zone.y + zone.height / 2} textAnchor="middle" dominantBaseline="middle">
-                    {t('Pen unreachable')}
-                  </text>
-                )}
-              </g>
-            ))}
+
             <line x1={settings.bedWidth / 2} y1="8" x2={settings.bedWidth / 2} y2={settings.bedHeight - 8} stroke="#14b8a6" strokeWidth="0.55" opacity="0.85" />
             <line x1="8" y1={settings.bedHeight / 2} x2={settings.bedWidth - 8} y2={settings.bedHeight / 2} stroke="#14b8a6" strokeWidth="0.55" opacity="0.85" />
             <circle cx={settings.bedWidth / 2} cy={settings.bedHeight / 2} r="5" fill="none" stroke="#14b8a6" strokeWidth="0.55" opacity="0.9" />
@@ -2502,6 +2486,16 @@ function App() {
               <text key={`y-${tick}`} x="9" y={tick + 1.5} fill="#c9d2d5" fontSize="5" textAnchor="middle">{tick}</text>
             ))}
             <rect data-paper="true" x={settings.originX} y={settings.originY} width={settings.paperWidth} height={settings.paperHeight} fill="#fbfbf7" fillOpacity="1" stroke="#14b8a6" strokeWidth="0.9" strokeDasharray="3 2" className={presetMenuOpen ? 'paper-rect paper-rect-move' : 'paper-rect'} />
+            {unreachableZones.map((zone, index) => (
+              <g key={`unreachable-${index}`} className="unreachable-zone" pointerEvents="none">
+                <rect x={zone.x} y={zone.y} width={zone.width} height={zone.height} />
+                {zone.width > 14 && zone.height > 14 && (
+                  <text x={zone.x + zone.width / 2} y={zone.y + zone.height / 2} textAnchor="middle" dominantBaseline="middle">
+                    {t('Pen unreachable')}
+                  </text>
+                )}
+              </g>
+            ))}
             {settings.originY + settings.paperHeight > getReachableBounds(settings).maxY && <g pointerEvents="none"><rect x={settings.originX} y={getReachableBounds(settings).maxY} width={settings.paperWidth} height={settings.originY + settings.paperHeight - getReachableBounds(settings).maxY} fill="#ef8c7c" opacity="0.10" /><line x1={settings.originX} x2={settings.originX + settings.paperWidth} y1={getReachableBounds(settings).maxY} y2={getReachableBounds(settings).maxY} stroke="#c77466" strokeDasharray="2 2" strokeWidth="0.5" /><text x={settings.originX + settings.paperWidth / 2} y={getReachableBounds(settings).maxY + 9} textAnchor="middle" fontSize="3.5" fill="#ac6559">{t('Outside drawing area')}</text></g>}
             {showTravel && logicalPreviewPaths.slice(1).map((path, index) => { const previous = logicalPreviewPaths[index].at(-1); return <line key={`travel-${index}`} x1={previous.x} y1={previous.y} x2={path[0].x} y2={path[0].y} stroke="#c06b3a" strokeWidth="0.45" strokeDasharray="2 2" opacity="0.55" pointerEvents="none" />; })}
             {presetMenuOpen && (
@@ -2611,7 +2605,7 @@ function App() {
             <div className="speed-control">
               <label htmlFor="plot-speed">{t('Speed')} <output>{settings.speedPercent}%</output></label>
               <input id="plot-speed" aria-label={t('Speed')} type="range" min="1" max="100" step="1" value={settings.speedPercent} disabled={plotBusy || printerStatus.streaming} onChange={(event) => setSettings((current) => ({...current,...speedProfile(event.target.value)}))} />
-              <div className="speed-caption"><span>{settings.feedrate / 60} {t('mm/s')}</span><span>{language === 'ru' ? 'Переезды' : 'Travel'}: {settings.travelSpeed / 60} {t('mm/s')}</span></div>
+              <div className="speed-caption"><span>{language === 'ru' ? 'Штрихи' : 'Drawing'}: {settings.feedrate / 60} {t('mm/s')}</span><span>{language === 'ru' ? 'Переезды' : 'Travel'}: {settings.travelSpeed / 60} {t('mm/s')}</span></div>
             </div>
             <div className="job-summary">
               <span>{t('Strokes')} <strong>{stats.paths}</strong></span>
