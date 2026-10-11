@@ -54,3 +54,6 @@ button.danger-action { border:0; background:rgba(220,85,85,.12); color:var(--red
 .turbo-toggle small { opacity:.7; }
 .turbo-toggle.is-active { background:#ffd12b; border-color:#ffd12b; color:#171717; }
 .turbo-toggle:disabled { opacity:.5; cursor:default; }
+.hosted-note { margin-bottom:16px; }
+.hosted-note p { color:var(--muted); font-size:12px; line-height:1.5; margin:0 0 10px; }
+.hosted-note button { width:100%; margin:4px 0; }

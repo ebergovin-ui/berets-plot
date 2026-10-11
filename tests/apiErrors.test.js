@@ -8,6 +8,9 @@ test('large SD jobs pass preflight; stream limits stay separate; API errors retu
   const root = `http://127.0.0.1:${server.address().port}`;
   const post = (route, body) => fetch(root + route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   try {
+    const corsResponse = await fetch(root + '/api/printer/status', { method: 'OPTIONS', headers: { Origin: 'https://ebergovin-ui.github.io', 'Access-Control-Request-Method': 'GET', 'Access-Control-Request-Private-Network': 'true' } });
+    assert.equal(corsResponse.headers.get('access-control-allow-origin'), 'https://ebergovin-ui.github.io');
+    assert.equal(corsResponse.headers.get('access-control-allow-private-network'), 'true');
     const nativeJob = [...nativeSpeedLines(), 'G0 Z7 F1200', ...nativeSpeedLines(true), 'G1 X50 Y50 F49800', 'M400', ...nativeSpeedLines(), 'G0 Z7 F1200'].join('\n');
     const nativeResponse = await post('/api/printer/preflight-gcode', { gcode: nativeJob });
     assert.equal((await nativeResponse.json()).validation.ok, true);

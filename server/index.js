@@ -28,7 +28,14 @@ const STATIC_DIR = process.env.PLOTTER_STATIC_DIR
 const PACKAGE_INFO = JSON.parse(readFileSync(path.resolve(__dirname, '../package.json'), 'utf8'));
 const app = express();
 
-app.use(cors({ origin: [/^http:\/\/127\.0\.0\.1:\d+$/, /^http:\/\/localhost:\d+$/] }));
+app.use((request, response, next) => {
+  if (request.headers.origin === 'https://ebergovin-ui.github.io'
+      && request.headers['access-control-request-private-network'] === 'true') {
+    response.setHeader('Access-Control-Allow-Private-Network', 'true');
+  }
+  next();
+});
+app.use(cors({ origin: [/^http:\/\/127\.0\.0\.1:\d+$/, /^http:\/\/localhost:\d+$/, 'https://ebergovin-ui.github.io'] }));
 app.use(['/api/printer/send-gcode', '/api/printer/preflight-gcode'], express.json({ limit: '64mb' }));
 app.use(express.json({ limit: '2mb' }));
 

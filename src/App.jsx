@@ -202,7 +202,9 @@ const defaultSettings = {
 
 const defaultObject = { x: 58, y: 88, w: 140, h: 54, angle: 0 };
 const colors = ['#101827', '#0f766e', '#b45309', '#7c3aed', '#be123c', '#2563eb'];
+const HOSTED_MODE = import.meta.env.VITE_HOSTED_MODE === '1';
 const PRINTER_API = import.meta.env.VITE_PRINTER_API_URL || 'http://127.0.0.1:5426';
+const printerFetch = (url, options = {}) => fetch(url, { ...options, ...(HOSTED_MODE ? { targetAddressSpace: 'loopback' } : {}) });
 const PRINTER_STORAGE_KEY = 'a1-plotter-printer-config';
 const DRAW_MIN_DISTANCE_MM = 1.2;
 const DRAW_MAX_POINTS_PER_STROKE = 900;
@@ -880,15 +882,17 @@ function App() {
     } catch { return clampPaperToReachableArea({...defaultSettings, ...speedProfile(defaultSettings.speedPercent)}); }
   });
   const [object, setObject] = useState(() => editorDraft?.object || defaultObject);
+  const [backendEnabled, setBackendEnabled] = useState(!HOSTED_MODE);
   const [printerConfig, setPrinterConfig] = useState(loadPrinterConfig);
   const [printerStatus, setPrinterStatus] = useState({ connected: false, lastReport: null });
   const [printerMessage, setPrinterMessage] = useState('');
   const [printerError, setPrinterError] = useState('');
   useEffect(() => {
+    if (!backendEnabled) return;
     let cancelled = false;
     const refresh = async () => {
       try {
-        const response = await fetch(`${PRINTER_API}/api/printer/status`);
+        const response = await printerFetch(`${PRINTER_API}/api/printer/status`);
         const data = await response.json();
         if (!cancelled && data.ok) {
           setPrinterStatus(data);
@@ -899,7 +903,7 @@ function App() {
     refresh();
     const timer = window.setInterval(refresh, 3000);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, []);
+  }, [backendEnabled]);
 
   const [discoveryBusy, setDiscoveryBusy] = useState(false);
   const [preflightMessage, setPreflightMessage] = useState('');
@@ -1781,7 +1785,7 @@ function App() {
 
   const callPrinterApi = async (path, body = null) => {
     try {
-      const response = await fetch(`${PRINTER_API}${path}`, {
+      const response = await printerFetch(`${PRINTER_API}${path}`, {
         method: body ? 'POST' : 'GET',
         headers: body ? { 'Content-Type': 'application/json' } : undefined,
         body: body ? JSON.stringify(body) : undefined,
@@ -1948,7 +1952,7 @@ function App() {
     setUpdateBusy(true);
     setUpdateStatus((current) => ({ ...current, message: 'Checking GitHub...' }));
     try {
-      const response = await fetch(`${PRINTER_API}/api/app/check-update`);
+      const response = await printerFetch(`${PRINTER_API}/api/app/check-update`);
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || 'Update check failed.');
       setUpdateStatus({
@@ -1969,7 +1973,7 @@ function App() {
     setUpdateBusy(true);
     setUpdateStatus((current) => ({ ...current, message: 'Installing update...' }));
     try {
-      const response = await fetch(`${PRINTER_API}/api/app/update`, {
+      const response = await printerFetch(`${PRINTER_API}/api/app/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -1988,21 +1992,21 @@ function App() {
   };
 
   useEffect(() => {
-    if (!mqttViewerOpen) return undefined;
+    if (!backendEnabled || !mqttViewerOpen) return undefined;
     refreshMqttLog({ reset: true });
     const interval = window.setInterval(() => refreshMqttLog(), 1000);
     return () => window.clearInterval(interval);
-  }, [mqttViewerOpen, refreshMqttLog]);
+  }, [backendEnabled, mqttViewerOpen, refreshMqttLog]);
 
   useEffect(() => {
-    if (autoDiscoveryTried.current || printerStatus.connected) return;
+    if (!backendEnabled || autoDiscoveryTried.current || printerStatus.connected) return;
     if (!printerConfig.serial || !printerConfig.accessCode) return;
     autoDiscoveryTried.current = true;
     let cancelled = false;
     const run = async () => {
       setDiscoveryBusy(true);
       try {
-        const statusResponse = await fetch(`${PRINTER_API}/api/printer/status`);
+        const statusResponse = await printerFetch(`${PRINTER_API}/api/printer/status`);
         const status = await statusResponse.json();
         if (cancelled) return;
         if (status.connected) {
@@ -2014,7 +2018,7 @@ function App() {
           await callPrinterApi('/api/printer/connect', printerConfig);
           return;
         }
-        const response = await fetch(`${PRINTER_API}/api/printer/discover`, {
+        const response = await printerFetch(`${PRINTER_API}/api/printer/discover`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ serial: printerConfig.serial, accessCode: printerConfig.accessCode, autoConnect: true }),
@@ -2033,7 +2037,7 @@ function App() {
         }
         if (data.connectedPrinter) {
           setTimeout(async () => {
-            const statusResponse = await fetch(`${PRINTER_API}/api/printer/status`);
+            const statusResponse = await printerFetch(`${PRINTER_API}/api/printer/status`);
             const statusData = await statusResponse.json();
             if (statusData.ok) {
               setPrinterStatus(statusData);
@@ -2052,7 +2056,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [printerConfig.accessCode, printerConfig.serial, printerStatus.connected]);
+  }, [backendEnabled, printerConfig.accessCode, printerConfig.serial, printerStatus.connected]);
 
   useEffect(() => {
     setSettings((current) => {
@@ -2554,8 +2558,9 @@ function App() {
         <aside className="panel settings-panel">
           <div className="control-group">
             <div className="inspector-heading"><h2>{t('Print job')}</h2><span className={`connection-dot ${printerStatus.connected ? 'online' : ''}`} title={t(printerStatus.connected ? 'Connected' : 'Not connected')} /></div>
-            <button className="quiet-button" onClick={() => setPrinterDetailsOpen((open) => !open)}>{t(printerStatus.connected ? 'Printer connected' : 'Connect printer')} <span>↗</span></button>
-            {(printerDetailsOpen || !printerStatus.connected) && <div className="connection-form">
+            {HOSTED_MODE && <div className="hosted-note"><p>{language === 'ru' ? 'Редактор работает без установки. Для отправки на принтер нужна локальная программа BERETS Plot.' : 'The editor needs no installation. Sending to a printer requires the local BERETS Plot app.'}</p><button onClick={exportGCode} disabled={!exportPaths.length}>{language === 'ru' ? 'Скачать G-code' : 'Download G-code'}</button>{!backendEnabled && <button className="quiet-button" onClick={() => {setBackendEnabled(true);setPrinterDetailsOpen(true);}}>{language === 'ru' ? 'Подключить локальную программу' : 'Connect local app'}</button>}</div>}
+            {backendEnabled && <button className="quiet-button" onClick={() => setPrinterDetailsOpen((open) => !open)}>{t(printerStatus.connected ? 'Printer connected' : 'Connect printer')} <span>↗</span></button>}
+            {backendEnabled && (printerDetailsOpen || !printerStatus.connected) && <div className="connection-form">
               <input aria-label={t('Printer IP')} value={printerConfig.host} onChange={(event) => updatePrinterConfig({host:event.target.value})} placeholder={t('Printer IP')} />
               <input aria-label={t('Serial / Device ID')} value={printerConfig.serial} onChange={(event) => updatePrinterConfig({serial:event.target.value})} placeholder={t('Serial / Device ID')} />
               <input aria-label={t('LAN Access Code')} type="password" value={printerConfig.accessCode} onChange={(event) => updatePrinterConfig({accessCode:event.target.value})} placeholder={t('LAN Access Code')} />
