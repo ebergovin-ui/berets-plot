@@ -4,7 +4,7 @@ import { plotGeometryErrors } from './plotSafety.js';
 export function compilePlot(paths, settings) {
   const errors = plotGeometryErrors(paths, settings);
   if (errors.length) throw new Error(errors.join(' '));
-  const zFeedrate = settings.zFeedrate ?? 600;
+  const zFeedrate = settings.turboMode ? 1200 : (settings.zFeedrate ?? 600);
   const f = (n) => Number(n).toFixed(2);
   const nozzle = (p) => ({ x: p.x - settings.penTipOffsetX + settings.penOffsetX, y: p.y - settings.penTipOffsetY + settings.penOffsetY });
   const lines = ['; BERETS Plot — nozzle coordinates, millimetres', '; Home before every job. No G92 / no pen-zero calibration.', 'M104 S0', 'M140 S0', 'M107', 'M17', 'M220 S100', 'G21', 'G90', 'G28', 'M400', `G0 Z${f(settings.penUpZ)} F${Math.round(zFeedrate)}`, 'M400'];

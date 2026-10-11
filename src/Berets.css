@@ -49,3 +49,8 @@ button.danger-action { border:0; background:rgba(220,85,85,.12); color:var(--red
 .word-format-grid {display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0;}
 .word-format-grid label {min-width:0;}
 .word-format-grid input,.word-format-grid select {width:100%;min-width:0;}
+
+.turbo-toggle { display:flex; align-items:center; justify-content:space-between; width:100%; margin-bottom:12px; padding:10px 14px; border:1px solid var(--line); border-radius:10px; background:var(--surface-raised); color:var(--text); cursor:pointer; transition:background .18s, border-color .18s; }
+.turbo-toggle small { opacity:.7; }
+.turbo-toggle.is-active { background:#ffd12b; border-color:#ffd12b; color:#171717; }
+.turbo-toggle:disabled { opacity:.5; cursor:default; }

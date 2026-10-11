@@ -6,7 +6,7 @@ export function plotGeometryErrors(paths, settings, preserveZZero = true) {
   if (paths.flat().some(point => !withinBed(point.x, point.y))) errors.push('Траектория карандаша выходит за пределы стола. Передвинь рисунок в доступную область.');
   if (!withinBed(settings.parkX, settings.parkY)) errors.push('Позиция парковки выходит за пределы стола.');
   if (![settings.penDownZ, settings.penUpZ, settings.safeZ].every(Number.isFinite) || settings.penDownZ < 0 || settings.penUpZ < settings.penDownZ || settings.penUpZ < 1 || settings.safeZ < settings.penUpZ || settings.safeZ > 20) errors.push('Проверь высоту ручки: 0 ≤ рисование ≤ переезд ≤ безопасная высота ≤ 20 мм; переезд от 1 мм.');
-  if (!Number.isFinite(settings.feedrate) || settings.feedrate<=0 || settings.feedrate>49800 || !Number.isFinite(settings.travelSpeed) || settings.travelSpeed<=0 || settings.travelSpeed>30000) errors.push('Проверь скорость рисования и переездов.');
+  if (!Number.isFinite(settings.feedrate) || settings.feedrate<=0 || settings.feedrate>49800 || !Number.isFinite(settings.travelSpeed) || settings.travelSpeed<=0 || settings.travelSpeed>(settings.turboMode ? 49800 : 30000)) errors.push('Проверь скорость рисования и переездов.');
   if (settings.zFeedrate !== undefined && (!Number.isFinite(settings.zFeedrate) || settings.zFeedrate <= 0 || settings.zFeedrate > 1200)) errors.push('Скорость Z должна быть больше 0 и не выше 20 мм/с.');
   return errors;
 }

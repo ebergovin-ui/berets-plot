@@ -177,6 +177,7 @@ const defaultSettings = {
   feedrate: 1500,
   travelSpeed: 1500,
   speedPercent: 5,
+  turboMode: false,
   orientationRevision: 2,
   motionRevision: 1,
   zFeedrate: 1200,
@@ -1078,6 +1079,8 @@ function App() {
       penDownZ: settings.penDownZ,
       feedrate: settings.feedrate,
       travelSpeed: settings.travelSpeed,
+      turboMode: settings.turboMode,
+      zFeedrate: settings.zFeedrate,
       parkX: settings.parkX,
       parkY: settings.parkY,
       penTipOffsetX: settings.penTipOffsetX,
@@ -1092,7 +1095,7 @@ function App() {
     preserveZZero,
     bambuSafetyHeader,
     lineNumbersEnabled,
-  }), [bambuSafetyHeader, exportPaths, homeBeforeDirectSend, lineNumbersEnabled, preserveZZero, settings.feedrate, settings.mirrorOutputX, settings.mirrorOutputY, settings.parkX, settings.parkY, settings.penDownZ, settings.penOffsetX, settings.penOffsetY, settings.penTipOffsetX, settings.penTipOffsetY, settings.penUpZ, settings.safeZ, settings.travelSpeed, zConfirmed]);
+  }), [bambuSafetyHeader, exportPaths, homeBeforeDirectSend, lineNumbersEnabled, preserveZZero, settings.feedrate, settings.mirrorOutputX, settings.mirrorOutputY, settings.parkX, settings.parkY, settings.penDownZ, settings.penOffsetX, settings.penOffsetY, settings.penTipOffsetX, settings.penTipOffsetY, settings.penUpZ, settings.safeZ, settings.travelSpeed, settings.turboMode, settings.zFeedrate, zConfirmed]);
   const preparedJobIsFresh = preparedJob?.signature === sliceSignature;
   const unreachableZones = useMemo(() => unreachablePenZones(settings), [settings.bedHeight, settings.bedWidth, settings.penTipOffsetX, settings.penTipOffsetY, settings.penOffsetX, settings.penOffsetY]);
 
@@ -1105,7 +1108,7 @@ function App() {
       bedHeight: preset.bedHeight,
       paperWidth: preset.paperWidth,
       paperHeight: preset.paperHeight,
-      ...speedProfile(settings.speedPercent),
+      ...speedProfile(settings.speedPercent, settings.turboMode),
       parkY: preset.bedHeight,
     }));
   };
@@ -2603,8 +2606,11 @@ function App() {
               </div>
             </div>}
             <div className="speed-control">
-              <label htmlFor="plot-speed">{t('Speed')} <output>{settings.speedPercent}%</output></label>
-              <input id="plot-speed" aria-label={t('Speed')} type="range" min="1" max="100" step="1" value={settings.speedPercent} disabled={plotBusy || printerStatus.streaming} onChange={(event) => setSettings((current) => ({...current,...speedProfile(event.target.value)}))} />
+              <button type="button" className={`turbo-toggle${settings.turboMode ? ' is-active' : ''}`} aria-pressed={Boolean(settings.turboMode)} disabled={plotBusy || printerStatus.streaming} onClick={() => setSettings(current => ({...current, ...speedProfile(current.speedPercent, !current.turboMode)}))}>
+                <span>{language === 'ru' ? 'Турбо' : 'Turbo'}</span><small>{settings.turboMode ? (language === 'ru' ? 'Включён' : 'On') : (language === 'ru' ? 'Выключен' : 'Off')}</small>
+              </button>
+              <label htmlFor="plot-speed">{t('Speed')} <output>{settings.turboMode ? 100 : settings.speedPercent}%</output></label>
+              <input id="plot-speed" aria-label={t('Speed')} type="range" min="1" max="100" step="1" value={settings.turboMode ? 100 : settings.speedPercent} disabled={plotBusy || printerStatus.streaming || settings.turboMode} onChange={(event) => setSettings((current) => ({...current,...speedProfile(event.target.value, current.turboMode)}))} />
               <div className="speed-caption"><span>{language === 'ru' ? 'Штрихи' : 'Drawing'}: {settings.feedrate / 60} {t('mm/s')}</span><span>{language === 'ru' ? 'Переезды' : 'Travel'}: {settings.travelSpeed / 60} {t('mm/s')}</span></div>
             </div>
             <div className="job-summary">

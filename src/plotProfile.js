@@ -1,9 +1,13 @@
 export const MAX_XY_SPEED_MM_S = 500;
 export const DRAW_SPEED_MULTIPLIER = 1.66;
-export function speedProfile(percent) {
+export function speedProfile(percent, turboMode = false) {
   const speedPercent = Math.max(1, Math.min(100, Number(percent) || 5));
-  const travelSpeed = Math.round(MAX_XY_SPEED_MM_S * 60 * speedPercent / 100);
-  return { speedPercent, feedrate: Math.round(travelSpeed * DRAW_SPEED_MULTIPLIER), travelSpeed };
+  const normalTravel = Math.round(MAX_XY_SPEED_MM_S * 60 * speedPercent / 100);
+  const maximum = Math.round(MAX_XY_SPEED_MM_S * 60 * DRAW_SPEED_MULTIPLIER);
+  return { speedPercent, turboMode: Boolean(turboMode),
+    feedrate: turboMode ? maximum : Math.round(normalTravel * DRAW_SPEED_MULTIPLIER),
+    travelSpeed: turboMode ? maximum : normalTravel };
+
 }
 export function upgradePlotProfile(saved, defaults = {}) {
   const next = { ...defaults, ...saved };
@@ -28,7 +32,7 @@ export function upgradePlotProfile(saved, defaults = {}) {
   }
   next.penUpZ = Math.max(next.penDownZ || 1, next.penProtrusion || 5) + Math.max(1,next.penLiftMm || 1);
   next.safeZ = Math.max(next.penUpZ, next.safeZ);
-  return { ...next, ...speedProfile(next.speedPercent) };
+  return { ...next, ...speedProfile(next.speedPercent, next.turboMode) };
 }
 export function reachablePenBounds(settings) {
   const dx=settings.penTipOffsetX-settings.penOffsetX;

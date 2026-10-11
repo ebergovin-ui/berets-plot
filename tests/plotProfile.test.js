@@ -76,3 +76,10 @@ test('30 mm front mount keeps ink at the top boundary reachable after output ref
  assert.ok(job.segments.filter(p=>p.draw).every(p=>p.to.y>=0 && p.to.y<=226));
  assert.throws(()=>compilePlot([[{x:23,y:29.99},{x:30,y:31}].map(p=>orientPlotPoint(p,s))],s),/пределы/);
 });
+test('turbo selection survives profile reload without losing normal slider setting',()=>{
+ const saved={...settings,orientationRevision:2,motionRevision:1,mountRevision:1,liftRevision:1,penLiftMm:2,turboMode:true,speedPercent:17};
+ const loaded=upgradePlotProfile(saved);
+ assert.equal(loaded.turboMode,true);assert.equal(loaded.speedPercent,17);
+ assert.equal(loaded.travelSpeed,49800);assert.equal(loaded.feedrate,49800);
+ assert.equal(speedProfile(loaded.speedPercent,false).travelSpeed,5100);
+});
