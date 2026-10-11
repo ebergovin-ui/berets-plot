@@ -1,3 +1,4 @@
+import { nativeSpeedLines } from './nativeSpeed.js';
 import { moveSeconds } from './motionTiming.js';
 import { plotGeometryErrors } from './plotSafety.js';
 
@@ -7,14 +8,14 @@ export function compilePlot(paths, settings) {
   const zFeedrate = settings.turboMode ? 1200 : (settings.zFeedrate ?? 600);
   const f = (n) => Number(n).toFixed(2);
   const nozzle = (p) => ({ x: p.x - settings.penTipOffsetX + settings.penOffsetX, y: p.y - settings.penTipOffsetY + settings.penOffsetY });
-  const lines = ['; BERETS Plot — nozzle coordinates, millimetres', '; Home before every job. No G92 / no pen-zero calibration.', 'M104 S0', 'M140 S0', 'M107', 'M17', 'M220 S100', 'G21', 'G90', 'G28', 'M400', `G0 Z${f(settings.penUpZ)} F${Math.round(zFeedrate)}`, 'M400'];
+  const lines = ['; BERETS Plot — nozzle coordinates, millimetres', '; Home before every job. No G92 / no pen-zero calibration.', 'M104 S0', 'M140 S0', 'M107', 'M17', 'M220 S100', ...nativeSpeedLines(), 'G21', 'G90', 'G28', 'M400', `G0 Z${f(settings.penUpZ)} F${Math.round(zFeedrate)}`, 'M400'];
   const segments = [];
   let current = { x: 0, y: 0, z: settings.penUpZ };
   const move = (target, draw, feed) => {
     const from = { ...current };
     const to = { ...current, ...target };
     const length = Math.hypot(to.x - from.x, to.y - from.y, to.z - from.z);
-    segments.push({ from, to, draw, seconds: moveSeconds(length, feed, target.z !== undefined ? 100 : 2000) });
+    segments.push({ from, to, draw, seconds: moveSeconds(length, draw && settings.turboMode ? feed * 2 : feed, target.z !== undefined ? 100 : 2000) });
     current = to;
     lines.push(`${draw ? 'G1' : 'G0'} ${Object.entries(target).map(([axis, n]) => `${axis.toUpperCase()}${f(n)}`).join(' ')} F${Math.round(feed)}`);
   };
@@ -22,7 +23,9 @@ export function compilePlot(paths, settings) {
     const first = nozzle(path[0]);
     move({ x: first.x, y: first.y }, false, settings.travelSpeed);
     move({ z: settings.penDownZ }, false, zFeedrate);
+    if (settings.turboMode) lines.push('M400', ...nativeSpeedLines(true));
     for (const point of path.slice(1)) move(nozzle(point), true, settings.feedrate);
+    if (settings.turboMode) lines.push('M400', ...nativeSpeedLines());
     move({ z: settings.penUpZ }, false, zFeedrate);
   }
   move({ x: settings.parkX, y: settings.parkY }, false, settings.travelSpeed);

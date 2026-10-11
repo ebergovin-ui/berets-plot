@@ -1,4 +1,5 @@
 import cors from 'cors';
+import { isNativeSpeedLine } from '../src/nativeSpeed.js';
 import { buildPlotArchive, plotStartPayload } from './plotArchive.js';
 import { mergePrinterReport, watchFileStart } from './printerState.js';
 import { transferFileJob } from './fileJob.js';
@@ -102,7 +103,7 @@ function validateGCode(gcode, { allowNegativeZ = false, allowHome = true, method
   lines.forEach((line, index) => {
     const cleaned = cleanLine(line);
     if (!cleaned) return;
-    if (!allowedCommands.test(cleaned)) {
+    if (!allowedCommands.test(cleaned) && !isNativeSpeedLine(cleaned)) {
       errors.push(`Line ${index + 1}: unsupported command "${cleaned}"`);
     }
     if (blockedPatterns.some((pattern) => pattern.test(cleaned))) {

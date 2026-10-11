@@ -24,3 +24,18 @@ test('turbo maximizes drawing, travel and Z while preserving clearance and norma
  assert.equal(speedProfile(s.speedPercent,false).travelSpeed,5100);
  assert.equal(speedProfile(s.speedPercent,false).feedrate,8466);
 });
+test('native 166 mode applies only to strokes and resets before every lift and travel',()=>{
+ const settings={bedWidth:256,bedHeight:256,penTipOffsetX:0,penTipOffsetY:0,penOffsetX:0,penOffsetY:0,parkX:0,parkY:256,penDownZ:1,penUpZ:7,safeZ:7,zFeedrate:1200,...speedProfile(100,true)};
+ const lines=compilePlot([[{x:50,y:50},{x:60,y:50},{x:65,y:55}],[{x:50,y:80},{x:60,y:80}]],settings).gcode.trim().split('\n');
+ let multiplier=1, drawCount=0;
+ for(let i=0;i<lines.length;i++) {
+  const line=lines[i];
+  if(line.startsWith('M204.2'))assert.equal(lines[i-1],i<12?'M220 S100':'M400');
+  if(line.startsWith('M220 K'))multiplier=Number(line.slice(6));
+  if(line.startsWith('G0 '))assert.equal(multiplier,1,`travel must use normal preset: ${line}`);
+  if(line.startsWith('G1 ')){assert.equal(multiplier,2);drawCount++;}
+ }
+ assert.equal(drawCount,3);assert.equal(multiplier,1);
+ assert.equal(lines.filter(l=>l==='M204.2 K1.60').length,2);
+ assert.match(lines.join('\n'),/G1 X60.00 Y50.00 F49800\nG1 X65.00 Y55.00 F49800/);
+});

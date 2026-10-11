@@ -2607,7 +2607,7 @@ function App() {
             </div>}
             <div className="speed-control">
               <button type="button" className={`turbo-toggle${settings.turboMode ? ' is-active' : ''}`} aria-pressed={Boolean(settings.turboMode)} disabled={plotBusy || printerStatus.streaming} onClick={() => setSettings(current => ({...current, ...speedProfile(current.speedPercent, !current.turboMode)}))}>
-                <span>{language === 'ru' ? 'Турбо' : 'Turbo'}</span><small>{settings.turboMode ? (language === 'ru' ? 'Включён' : 'On') : (language === 'ru' ? 'Выключен' : 'Off')}</small>
+                <span>{language === 'ru' ? 'Турбо' : 'Turbo'}</span><small>{settings.turboMode ? (language === 'ru' ? '166% · штрихи' : '166% · strokes') : (language === 'ru' ? 'Выключен' : 'Off')}</small>
               </button>
               <label htmlFor="plot-speed">{t('Speed')} <output>{settings.turboMode ? 100 : settings.speedPercent}%</output></label>
               <input id="plot-speed" aria-label={t('Speed')} type="range" min="1" max="100" step="1" value={settings.turboMode ? 100 : settings.speedPercent} disabled={plotBusy || printerStatus.streaming || settings.turboMode} onChange={(event) => setSettings((current) => ({...current,...speedProfile(event.target.value, current.turboMode)}))} />
