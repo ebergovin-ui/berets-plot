@@ -1,3 +1,4 @@
+import { composeScenePaths, commitDrawPath } from './scenePaths.js';
 import QRCode from 'qrcode';
 import { switchTool } from './toolProfiles.js';
 import { emojiGlyphs, normalizeEmojiText } from './emojiGlyphs.js';
@@ -1041,9 +1042,8 @@ function App() {
     return generatedModePaths;
   }, [drawPaths, generatedModePaths, imagePaths, mode, photoMode, shapePaths, svgPaths, textPaths, transformedQrPaths]);
 
-  const enabledLayerPaths = useMemo(() => layers.filter((layer) => layer.enabled).sort((a, b) => a.order - b.order).flatMap((layer) => layer.paths), [layers]);
   const enabledLayers = useMemo(() => layers.filter((layer) => layer.enabled).sort((a, b) => a.order - b.order), [layers]);
-  const exportSourcePaths = enabledLayerPaths.length ? enabledLayerPaths : projectPaths;
+  const exportSourcePaths = useMemo(() => composeScenePaths(layers, projectPaths), [layers, projectPaths]);
   const logicalPreviewPaths = useMemo(() => applySettings(exportSourcePaths, settings, { mirrorOutput: false }), [exportSourcePaths, settings]);
   const exportPaths = useMemo(() => orderPathsForExport(applySettings(exportSourcePaths, settings), { preserveOrder: true }), [exportSourcePaths, mode, settings]);
   const stats = useMemo(() => ({
@@ -1676,12 +1676,8 @@ function App() {
     }
     if (activeDrawPath.current && activeDrawIndex.current !== null) {
       const finalPath = [...activeDrawPath.current];
-      setDrawPaths((paths) => {
-        const next = [...paths];
-        if (finalPath.length < 2) next.splice(activeDrawIndex.current, 1);
-        else next[activeDrawIndex.current] = finalPath;
-        return next;
-      });
+      const finalIndex = activeDrawIndex.current;
+      setDrawPaths(paths => commitDrawPath(paths, finalIndex, finalPath));
     }
     activeDrawPath.current = null;
     activeDrawIndex.current = null;
@@ -2510,9 +2506,8 @@ function App() {
               </>
             )}
             {previewUrl && mode === 'photos' && photoMode === 'image' && <image href={previewUrl} x={object.x} y={object.y} width={object.w} height={object.h} opacity="0.16" preserveAspectRatio="xMidYMid meet" />}
-            {enabledLayers.length > 0
-              ? enabledLayers.map((layer) => layer.paths.map((path, index) => <path key={`${layer.id}-${index}`} d={toPathData(applySettings([path], settings, { mirrorOutput: false })[0])} fill="none" stroke={layer.color} strokeWidth="0.75" strokeLinecap="round" strokeLinejoin="round" />))
-              : projectPaths.map((path, index) => <path key={index} d={toPathData(applySettings([path], settings, { mirrorOutput: false })[0])} fill="none" stroke="#0f766e" strokeWidth="0.75" strokeLinecap="round" strokeLinejoin="round" />)}
+            {enabledLayers.map((layer) => layer.paths.map((path, index) => <path key={`${layer.id}-${index}`} d={toPathData(applySettings([path], settings, { mirrorOutput: false })[0])} fill="none" stroke={layer.color} strokeWidth="0.75" strokeLinecap="round" strokeLinejoin="round" />))}
+            {composeScenePaths(layers.map(layer => ({...layer, enabled:false})), projectPaths).map((path, index) => <path key={`live-${index}`} d={toPathData(applySettings([path], settings, { mirrorOutput: false })[0])} fill="none" stroke="#0f766e" strokeWidth="0.75" strokeLinecap="round" strokeLinejoin="round" />)}
             {mode === 'text' && textItems.map((item) => (
               <g key={item.id} transform={`rotate(${item.object.angle} ${item.object.x + item.object.w / 2} ${item.object.y + item.object.h / 2})`}>
                 <rect
