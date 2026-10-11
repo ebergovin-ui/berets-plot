@@ -231,6 +231,7 @@ async function discoverBambuPrinters(timeoutMs = 5000) {
 
 function publish(payload, qos = 0) {
   return new Promise((resolve, reject) => {
+    if (!client?.connected || !connected) { reject(new Error('Printer is not connected.')); return; }
     const topic = requestTopic();
     addMqttLog('out', topic, payload);
     const timer = setTimeout(() => reject(new Error('Printer command timeout.')), 5000);
@@ -257,16 +258,21 @@ function startPrinterConnection({ host, serial, accessCode }) {
     rejectUnauthorized: false,
     connectTimeout: 8000,
     reconnectPeriod: 3000,
+    queueQoSZero: false,
   });
 
+  const connection = client;
   client.on('connect', () => {
+    if (client !== connection) return;
     connected = true;
+    lastError = '';
     client.subscribe(reportTopic(), (error) => {
       if (!error) publish({ pushing: { sequence_id: nextSequence(), command: 'pushall' } }).catch(error => { lastError = error.message; });
     });
   });
 
   client.on('message', (topic, message) => {
+    if (client !== connection) return;
     if (topic !== reportTopic()) return;
     try {
       const report = JSON.parse(message.toString());
@@ -279,10 +285,12 @@ function startPrinterConnection({ host, serial, accessCode }) {
   });
 
   client.on('error', (error) => {
+    if (client !== connection) return;
     lastError = error.message;
   });
 
   client.on('close', () => {
+    if (client !== connection) return;
     connected = false;
   });
 }

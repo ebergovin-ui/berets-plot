@@ -1,3 +1,4 @@
+import { validateGCodeLocally } from './gcodeValidation.js';
 import { composeScenePaths, commitDrawPath } from './scenePaths.js';
 import QRCode from 'qrcode';
 import { switchTool } from './toolProfiles.js';
@@ -156,6 +157,7 @@ const unsupportedTextChars = (items) => {
 };
 
 const compressedTextItems = (items) => items.filter((item) => {
+  if (item.fontSizePt) return false;
   const visibleChars = Math.max(1, ...normalizeTextForGlyphs(formatTextBlock(item)).split('\n').map((line) => [...line].filter((char) => char !== ' ').length));
   return item.object.w / visibleChars < MIN_TEXT_CHAR_WIDTH_MM;
 });
@@ -205,13 +207,6 @@ const PRINTER_STORAGE_KEY = 'a1-plotter-printer-config';
 const DRAW_MIN_DISTANCE_MM = 1.2;
 const DRAW_MAX_POINTS_PER_STROKE = 900;
 const MIN_TEXT_CHAR_WIDTH_MM = 5;
-const BLOCKED_GCODE_PATTERNS = [
-  /^M109\b/i,
-  /^M190\b/i,
-  /^M106\b/i,
-  /\bE-?\d/i,
-];
-const ALLOWED_GCODE_COMMANDS = /^(G0|G1|G4|G21|G28|G90|G91|G92|M2|M17|M18|M84|M104|M107|M140|M220|M221|M400)\b/i;
 
 const loadPrinterConfig = () => {
   try {
@@ -253,35 +248,6 @@ const prettyMqttPayload = (payload) => JSON.stringify(payload, null, 2);
 const stripLineNumber = (line) => line.replace(/^N\d+\s+/i, '');
 const cleanGCodeLine = (line) => stripLineNumber(line).split(';')[0].trim();
 
-const isUnsafeSafetyCommand = (line) => (
-  (/^M104\b/i.test(line) && !/^M104\s+S0(\s|$)/i.test(line))
-  || (/^M140\b/i.test(line) && !/^M140\s+S0(\s|$)/i.test(line))
-  || (/^M221\b/i.test(line) && !/^M221\s+S(0|100)(\s|$)/i.test(line))
-);
-
-const homesZ = (line) => /^G28(\s*$|\s+(?=.*\bZ\b))/i.test(line);
-
-const validateGCodeLocally = (gcode, { allowNegativeZ = false, allowHome = false } = {}) => {
-  const errors = [];
-  const executableLines = gcode.split(/\r?\n/).filter((line) => cleanGCodeLine(line));
-
-  executableLines.forEach((line, index) => {
-    const cleaned = cleanGCodeLine(line);
-    if (!ALLOWED_GCODE_COMMANDS.test(cleaned)) errors.push(`Line ${index + 1}: unsupported command "${cleaned}"`);
-    if (BLOCKED_GCODE_PATTERNS.some((pattern) => pattern.test(cleaned))) errors.push(`Line ${index + 1}: blocked command "${cleaned}"`);
-    if (isUnsafeSafetyCommand(cleaned)) errors.push(`Line ${index + 1}: unsafe safety command "${cleaned}"`);
-    if (/^G28\b/i.test(cleaned) && !allowHome && homesZ(cleaned)) errors.push(`Line ${index + 1}: Z homing is disabled for direct send`);
-    const zMatch = cleaned.match(/\bZ(-?\d+(\.\d+)?)/i);
-    if (zMatch && Number(zMatch[1]) < 0 && !allowNegativeZ) errors.push(`Line ${index + 1}: negative Z requires confirmation`);
-  });
-
-  return {
-    ok: errors.length === 0,
-    errors,
-    lineCount: executableLines.length,
-    byteCount: gcode.length,
-  };
-};
 
 const createTextItem = (id, index = 0) => ({
   id,
@@ -1828,11 +1794,13 @@ function App() {
       }
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || data.validation?.errors?.join(' ') || 'Printer API request failed.');
+      if (body) setPrinterError('');
       setPrinterMessage(data.message || (data.filename ? `Started ${data.filename} by file mode.` : (data.sentLineCount ? `${t('Commands sent')} · ${data.sentLineCount}` : t('Printer command accepted.'))));
       return data;
     } catch (error) {
-      setPrinterError(error.message);
-      setPrinterMessage(error.message);
+      const message = language === 'ru' ? error.message.replace('Printer command timeout.', 'Принтер не ответил. Проверь сеть и подключись заново.').replace('Printer is not connected.', 'Принтер не подключён. Нажми «Подключить».') : error.message;
+      setPrinterError(message);
+      setPrinterMessage(message);
       return null;
     }
   };
@@ -1857,7 +1825,7 @@ function App() {
       setPrinterStatus(data);
       if (!data.connected) setCalibrationStep('idle');
       setPrinterMessage(data.connected ? t('Connected') : (data.lastError || t('Not connected')));
-      if (data.connected) setPrinterDetailsOpen(false);
+      if (data.connected) { setPrinterDetailsOpen(false); if (!printerStatus.connected) setPrinterError(''); }
     }
   };
 
@@ -2054,7 +2022,8 @@ function App() {
         const data = await response.json();
         if (cancelled) return;
         if (!response.ok || !data.ok) throw new Error(data.error || 'Printer discovery failed.');
-        setPrinterMessage(data.message || 'Printer discovery finished.');
+        if (body) setPrinterError('');
+      setPrinterMessage(data.message || 'Printer discovery finished.');
         const discovered = data.connectedPrinter || data.selectedPrinter;
         if (discovered) {
           updatePrinterConfig({
@@ -2295,7 +2264,7 @@ function App() {
                 <p className="warning compact-warning">Unsupported text characters skipped: {unsupportedChars.join(' ')}</p>
               )}
               {compressedTexts.length > 0 && (
-                <p className="warning compact-warning">Some text is too compressed and may overlap. Increase width or reduce characters.</p>
+                <p className="warning compact-warning">{language === 'ru' ? 'Текст слишком сжат. Увеличь ширину блока или сократи строку.' : 'Text is too compressed. Increase the block width or shorten the line.'}</p>
               )}
               
             </div>
