@@ -10,8 +10,9 @@ export async function transferFileJob({gcode,filename,ftp,access,start,signal,re
   if(signal.aborted)return {cancelled:true};
   if(await ftp.size(remotePath)!==bytes)throw new Error('Uploaded file size mismatch. Printer was not started.');
   if(signal.aborted)return {cancelled:true};
-  await start(filename);
-  return {cancelled:false,bytes};
+  const dispatch = await start(filename);
+  if(signal.aborted)return {cancelled:true,bytes};
+  return {cancelled:false,bytes,...dispatch};
  } catch(error) {if(signal.aborted)return {cancelled:true};throw error;}
  finally {signal.removeEventListener('abort',cancel);ftp.close();}
 }

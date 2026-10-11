@@ -18,3 +18,11 @@ test('cancel during upload never starts the printer',async()=>{
  const s=setup();s.ftp.uploadFrom=async()=>s.controller.abort();
  assert.equal((await transferFileJob(s.params)).cancelled,true);assert.ok(!s.calls.includes('start'));
 });
+test('binary project archive is uploaded intact and dispatch result is preserved',async()=>{
+ const s=setup(), bytes=Buffer.from([0x50,0x4b,0x03,0x04,0xff,0x00]);
+ s.params.gcode=bytes;
+ s.ftp.uploadFrom=async(stream)=>{const chunks=[];for await(const data of stream)chunks.push(data);assert.deepEqual(Buffer.concat(chunks),bytes);};
+ s.ftp.size=async()=>bytes.length;
+ s.params.start=async()=>({started:true,state:'PREPARE'});
+ assert.equal((await transferFileJob(s.params)).started,true);
+});

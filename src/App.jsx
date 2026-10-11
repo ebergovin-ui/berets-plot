@@ -1931,7 +1931,7 @@ function App() {
         gcode: job.gcode, confirmed: true, allowNegativeZ: false,
         allowHome: true, method: 'file', startDelayMs: 0,
       });
-      if (result) setPrinterMessage(result.cancelled ? (language === 'ru' ? 'Загрузка отменена. Запуск не отправлен.' : 'Upload cancelled. Start was not sent.') : (language === 'ru' ? 'Файл передан. Принтер подтвердил команду запуска.' : 'File uploaded to printer SD card. Start requested.'));
+      if (result) setPrinterMessage(result.cancelled ? (language === 'ru' ? 'Загрузка отменена. Запуск не отправлен.' : 'Upload cancelled. Start was not sent.') : (result.started ? (language === 'ru' ? 'Задание запущено на принтере.' : 'Printer started the job.') : (language === 'ru' ? 'Файл на карте, но начало рисования не подтверждено. Проверь экран принтера. Повторно не отправляй.' : 'File uploaded, but start is unconfirmed. Check the printer screen before sending again.')));
     } finally { setPlotBusy(false); operationLock.current = false; }
   };
 

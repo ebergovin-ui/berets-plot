@@ -1,6 +1,6 @@
 {
   "name": "berets-plot",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "BERETS Plot — local text and drawing workspace for Bambu Lab pen plotters.",
   "type": "module",
   "bin": {
@@ -30,6 +30,7 @@
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "hersheytext": "^2.0.0",
+    "jszip": "^3.10.2",
     "mammoth": "^1.13.0",
     "mqtt": "^5.15.1",
     "qrcode": "^1.5.4",

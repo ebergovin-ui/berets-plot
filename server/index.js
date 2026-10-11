@@ -1,4 +1,6 @@
 import cors from 'cors';
+import { buildPlotArchive, plotStartPayload } from './plotArchive.js';
+import { mergePrinterReport, watchFileStart } from './printerState.js';
 import { transferFileJob } from './fileJob.js';
 import { createCommandClock } from '../src/motionTiming.js';
 import { waitForCommandAck } from './commandAck.js';
@@ -258,14 +260,17 @@ function startPrinterConnection({ host, serial, accessCode }) {
 
   client.on('connect', () => {
     connected = true;
-    client.subscribe(reportTopic());
+    client.subscribe(reportTopic(), (error) => {
+      if (!error) publish({ pushing: { sequence_id: nextSequence(), command: 'pushall' } }).catch(error => { lastError = error.message; });
+    });
   });
 
   client.on('message', (topic, message) => {
     if (topic !== reportTopic()) return;
     try {
-      lastReport = JSON.parse(message.toString());
-      addMqttLog('in', topic, lastReport);
+      const report = JSON.parse(message.toString());
+      lastReport = mergePrinterReport(lastReport, report);
+      addMqttLog('in', topic, report);
     } catch {
       lastReport = { raw: message.toString() };
       addMqttLog('in', topic, lastReport);
@@ -363,13 +368,21 @@ async function startGCodeFile(filename) {
   });
 }
 
-async function startA1PlotFile(filename,signal) {
-  const sequence_id=nextSequence();
-  const ack=waitForCommandAck(client,sequence_id,signal,15000,'project_file');
-  await Promise.all([ack,publish({print:{sequence_id,command:'project_file',param:filename,
-    url:`file:///sdcard/${filename}`,file:filename,subtask_name:filename,
-    project_id:'0',profile_id:'0',task_id:'0',subtask_id:'0',md5:'',
-    timelapse:false,bed_levelling:false,flow_cali:false,vibration_cali:false,layer_inspect:false,use_ams:false}})]);
+async function startA1PlotFile(filename, md5, signal) {
+  if (signal.aborted) return { cancelled: true, started: false };
+  const sequence_id = nextSequence();
+  const watch = watchFileStart(client, reportTopic(), filename, signal);
+  try {
+    const [accepted] = await Promise.all([
+      waitForCommandAck(client, sequence_id, signal, 15000, 'project_file'),
+      publish(plotStartPayload(filename, md5, sequence_id)),
+    ]);
+    if (!accepted || signal.aborted) return { cancelled: true, started: false };
+    await publish({ pushing: { sequence_id: nextSequence(), command: 'pushall' } });
+    const result = await watch.promise;
+    if (result.error) throw new Error(result.error);
+    return result;
+  } finally { watch.stop(); }
 }
 
 async function sendPrintControl(command) {
@@ -497,6 +510,31 @@ app.post('/api/printer/disconnect', (request, response) => {
   response.json({ ok: true });
 });
 
+app.get('/api/printer/storage', async (request, response) => {
+  if (!requireConnected(response)) return;
+  if (activeStream) return response.status(409).json({ ok: false, error: 'Storage inspection waits until file transfer finishes.' });
+  const ftp = new FTPClient(10000);
+  let stage = 'login';
+  try {
+    await ftp.access({ host: config.host, port: 990, user: 'bblp', password: config.accessCode,
+      secure: 'implicit', secureOptions: { rejectUnauthorized: false } });
+    stage = 'list';
+    const files = await ftp.list();
+    const recent = files.filter(file => /^berets_plot_.*\.gcode$/.test(file.name))
+      .sort((a, b) => b.name.localeCompare(a.name)).slice(0, 3);
+    const checks = [];
+    for (const file of recent) {
+      const item = { name: file.name, listedBytes: file.size };
+      try { item.sizeBytes = await ftp.size('/' + file.name); }
+      catch (error) { item.sizeError = error.message; }
+      checks.push(item);
+    }
+    response.json({ ok: true, entries: files.length, folders: files.filter(file => file.isDirectory).map(file => file.name), recent: checks });
+  } catch (error) {
+    response.status(502).json({ ok: false, stage, error: error.message });
+  } finally { ftp.close(); }
+});
+
 app.post('/api/printer/send-gcode', async (request, response) => {
   if (!requireConnected(response)) return;
   if (activeStream) { response.status(409).json({ ok: false, error: 'Another plot is streaming. Stop or wait for it first.' }); return; }
@@ -513,6 +551,11 @@ app.post('/api/printer/send-gcode', async (request, response) => {
   const safeZMatch = (gcode || '').match(/\bG0\s+Z(\d+(\.\d+)?)\s+F/i);
   if (safeZMatch) lastSafeZ = Number(safeZMatch[1]);
 
+  if (method !== 'stream' && ['PREPARE', 'RUNNING', 'PAUSE'].includes(lastReport?.print?.gcode_state)) {
+    response.status(409).json({ ok: false, error: 'Printer already has an active job. Stop it before sending another file.' });
+    return;
+  }
+
   const resolvedMethod = method;
 
   if (resolvedMethod === 'stream') {
@@ -523,14 +566,15 @@ app.post('/api/printer/send-gcode', async (request, response) => {
     return;
   }
 
-  const filename = `berets_plot_${Date.now()}.gcode`;
+  const filename = `berets_plot_${Date.now()}.gcode.3mf`;
   const job = {abort:false,paused:false,controller:new AbortController()};
   activeStream=job;
   try {
-    const result=await transferFileJob({gcode,filename,ftp:new FTPClient(15000),
+    const archive = await buildPlotArchive(gcode);
+    const result=await transferFileJob({gcode:archive.bytes,filename,ftp:new FTPClient(15000),
       access:{host:config.host,port:990,user:'bblp',password:config.accessCode,secure:'implicit',secureOptions:{rejectUnauthorized:false}},
-      start:name=>startA1PlotFile(name,job.controller.signal),signal:job.controller.signal,remotePath:`/${filename}`});
-    response.json({ok:true,validation,method:'file',filename:`cache/${filename}`,...result,message:result.cancelled?'File upload cancelled; printer not started.':'File uploaded and start requested.'});
+      start:name=>startA1PlotFile(name,archive.md5,job.controller.signal),signal:job.controller.signal,remotePath:`/${filename}`});
+    response.json({ok:true,validation,method:'file',filename,...result,message:result.cancelled?'File upload cancelled; printer not started.':'File uploaded and start requested.'});
   } catch(error) {
     lastError=error.message;
     response.status(502).json({ok:false,error:`File transfer failed: ${error.message}`});
