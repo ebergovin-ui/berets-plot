@@ -26,6 +26,7 @@ const PACKAGE_INFO = JSON.parse(readFileSync(path.resolve(__dirname, '../package
 const app = express();
 
 app.use(cors({ origin: [/^http:\/\/127\.0\.0\.1:\d+$/, /^http:\/\/localhost:\d+$/] }));
+app.use(['/api/printer/send-gcode', '/api/printer/preflight-gcode'], express.json({ limit: '64mb' }));
 app.use(express.json({ limit: '2mb' }));
 
 let client = null;
@@ -58,6 +59,8 @@ const blockedPatterns = [
 const allowedCommands = /^(G0|G1|G4|G21|G28|G90|G91|G92|M2|M17|M18|M84|M104|M107|M140|M220|M221|M400)\b/i;
 const MAX_DIRECT_SEND_LINES = 100000;
 const MAX_DIRECT_SEND_BYTES = 1500000;
+const MAX_FILE_SEND_BYTES = 32 * 1024 * 1024;
+const MAX_FILE_SEND_LINES = 1000000;
 const DEFAULT_START_DELAY_MS = 2500;
 const DEFAULT_LINE_DELAY_MS = 80;
 
@@ -77,17 +80,21 @@ function homesZ(line) {
   return /^G28(\s*$|\s+(?=.*\bZ\b))/i.test(line);
 }
 
-function validateGCode(gcode, { allowNegativeZ = false, allowHome = true } = {}) {
+function validateGCode(gcode, { allowNegativeZ = false, allowHome = true, method = 'file' } = {}) {
+  if (typeof gcode !== 'string') return { ok: false, errors: ['G-code must be text.'], lineCount: 0, byteCount: 0 };
+  const byteCount = Buffer.byteLength(gcode, 'utf8');
+  const maxBytes = method === 'stream' ? MAX_DIRECT_SEND_BYTES : MAX_FILE_SEND_BYTES;
+  const maxLines = method === 'stream' ? MAX_DIRECT_SEND_LINES : MAX_FILE_SEND_LINES;
   const lines = gcode.split(/\r?\n/);
   const errors = [];
   const executableLines = lines.filter((line) => cleanLine(line));
 
-  if (gcode.length > MAX_DIRECT_SEND_BYTES) {
-    errors.push(`G-code is too large for direct printer send (${gcode.length} bytes). Export and inspect it first.`);
+  if (byteCount > maxBytes) {
+    errors.push(`G-code exceeds the ${method} limit of ${maxBytes} bytes.`);
   }
 
-  if (executableLines.length > MAX_DIRECT_SEND_LINES) {
-    errors.push(`G-code has too many motion lines for direct printer send (${executableLines.length}). Reduce detail or export to file.`);
+  if (executableLines.length > maxLines) {
+    errors.push(`G-code exceeds the ${method} limit of ${maxLines} motion lines.`);
   }
 
   lines.forEach((line, index) => {
@@ -115,7 +122,7 @@ function validateGCode(gcode, { allowNegativeZ = false, allowHome = true } = {})
     ok: errors.length === 0,
     errors,
     lineCount: executableLines.length,
-    byteCount: gcode.length,
+    byteCount,
   };
 }
 
@@ -498,7 +505,7 @@ app.post('/api/printer/send-gcode', async (request, response) => {
     response.status(400).json({ ok: false, error: 'Safety confirmation is required before sending G-code.' });
     return;
   }
-  const validation = validateGCode(gcode || '', { allowNegativeZ, allowHome });
+  const validation = validateGCode(gcode ?? '', { allowNegativeZ, allowHome, method });
   if (!validation.ok) {
     response.status(400).json({ ok: false, validation });
     return;
@@ -532,8 +539,8 @@ app.post('/api/printer/send-gcode', async (request, response) => {
 });
 
 app.post('/api/printer/preflight-gcode', (request, response) => {
-  const { gcode, allowNegativeZ = false, allowHome = false } = request.body;
-  const validation = validateGCode(gcode || '', { allowNegativeZ, allowHome });
+  const { gcode, allowNegativeZ = false, allowHome = false, method = 'file' } = request.body;
+  const validation = validateGCode(gcode ?? '', { allowNegativeZ, allowHome, method });
   response.json({ ok: true, validation });
 });
 
@@ -681,6 +688,22 @@ app.post('/api/printer/stop', async (request, response) => {
   if (!requireConnected(response)) return;
   await emergencyStopPlot();
   response.json({ ok: true, message: 'Emergency stop sent: pause, stop, and safe Z lift requested.' });
+});
+
+app.use('/api', (request, response) => {
+  response.status(404).json({ ok: false, error: 'Unknown API endpoint. Refresh the application.' });
+});
+
+app.use((error, request, response, next) => {
+  if (response.headersSent) return next(error);
+  const status = error.type === 'entity.too.large' ? 413
+    : error.type === 'entity.parse.failed' ? 400
+    : /timeout/i.test(error.message || '') ? 504 : 500;
+  const message = status === 413
+    ? `Request exceeds the ${Math.round(error.limit / 1024 / 1024)} MB upload limit.`
+    : status === 400 ? 'Invalid JSON request.'
+    : error.message || 'Printer server error.';
+  response.status(status).json({ ok: false, error: message });
 });
 
 if (existsSync(STATIC_DIR)) {

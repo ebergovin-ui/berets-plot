@@ -1830,7 +1830,9 @@ function App() {
       });
       const contentType = response.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
-        throw new Error(`Printer backend did not return JSON. Make sure npm.cmd run server is running at ${PRINTER_API}.`);
+        throw new Error(response.status === 413
+          ? (language === 'ru' ? 'Задание превышает допустимый размер отправки.' : 'The job exceeds the upload size limit.')
+          : (language === 'ru' ? `Сервер вернул неожиданный ответ (HTTP ${response.status}). Обнови страницу.` : `Unexpected server response (HTTP ${response.status}). Refresh the page.`));
       }
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || data.validation?.errors?.join(' ') || 'Printer API request failed.');
